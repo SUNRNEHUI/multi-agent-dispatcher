@@ -1,36 +1,53 @@
 ---
 name: multi-agent-dispatcher
-description: Use when executing implementation plans with independent tasks, context gets polluted during long sessions, sub-agents return verbose outputs, tasks fail without recovery, or parallel execution with dependency tracking is needed.
+description: Use when user says "帮我计划一下" or "做XXX" that requires multi-task splitting — breaks down tasks to TASKS.json, auto-dispatches sub-agents, manages entire flow without interruption.
 ---
 
 # Multi-Agent Task Dispatcher
 
-> 持久化任务状态 + DAG 依赖 + 结构化摘要 = 模型不降智
+> 计划落盘 + 自动调度 + 干净上下文 = 主 agent 全程控制不中断
 
 ## 核心目标
 
+- **计划落盘**：拆分任务 → TASKS.json（不放上下文，防止丢失）
+- **自动执行**：无需用户确认，主 agent 直接调度
 - **上下文干净**：子 agent 只看到最小输入
-- **任务约束明确**：结构化 task 定义
-- **结果可验证**：质量门禁
-- **失败可恢复**：checkpoint + 重试
+- **全程控制**：主 agent 管理、合并、调度、检查整个流程
 
 ## 触发条件
 
-- 用户说"开始执行"、"执行计划"、"dispatch tasks"
-- TASKS.json 存在且有 pending 任务
-- 上下文使用率 > 70%
+| 用户表达 | 动作 |
+|---------|------|
+| "帮我计划一下" | 拆分任务 → TASKS.json → 开始调度 |
+| "做XXX"（需要多步骤） | 拆分任务 → TASKS.json → 开始调度 |
+| "开始执行" | 检查 TASKS.json → 继续调度 pending 任务 |
+| TASKS.json 存在 + 有 pending | 继续调度 |
+
+## 执行流程
+
+```
+用户: "帮我计划一下做一个待办应用"
+
+主 agent:
+1. 拆分任务到 TASKS.json（落盘，不放上下文）
+2. 扫描可运行任务
+3. 自动启动子 agent（无需确认）
+4. 监控完成状态
+5. 验证结果
+6. 继续调度下一批，直到全部完成
+7. 合并结果，向用户报告
+```
 
 ## 文件结构
 
 ```
 project/
 ├── .dispatcher/
-│   ├── TASKS.json              # 任务状态机（所有状态在这里）
-│   ├── SUMMARY/                # 子 agent 返回的摘要
-│   ├── CACHE/                  # 结果缓存（加速重跑）
-│   └── LOGS/                   # 审计日志
-├── docs/plans/                 # 计划文件（触发点）
-└── src/                        # 实际代码
+│   ├── TASKS.json              # 任务状态机（SSOT）
+│   ├── SUMMARY/                # 子 agent 摘要
+│   ├── CACHE/                 # 结果缓存（加速重跑）
+│   └── LOGS/                  # 审计日志
+└── src/                       # 实际代码
 ```
 
 ## 任务状态机
@@ -42,7 +59,7 @@ pending → running → completed/verified
                               → fatal (需要人工介入)
 ```
 
-### 状态流转关键规则
+### 状态流转规则
 
 | 状态 | 含义 | 流转条件 |
 |------|------|----------|
@@ -52,139 +69,83 @@ pending → running → completed/verified
 | `verified` | 已验证 | Master 质量检查通过 |
 | `failed` | 失败 | 子 agent 返回错误 |
 | `blocked` | 阻塞 | 依赖任务失败 |
-| `fatal` | 致命 | 重试超过上限或致命错误 |
+| `fatal` | 致命 | 重试超过上限 |
 
 ## 调度算法
 
-### 并行扫描
-
-```python
-def get_runnable_tasks(tasks, max_parallel):
-    # 1. 过滤 status == "pending"
-    # 2. 检查所有 depends_on 是否 completed/verified
-    # 3. 检查 file_locks 不冲突
-    # 4. 按 priority 排序
-    # 5. 取前 max_parallel 个
-```
-
-### 调度流程
-
-```dot
-digraph dispatch {
-    "读取 TASKS.json" -> "扫描 pending 任务";
-    "扫描 pending 任务" -> "检查依赖满足?";
-    "检查依赖满足?" -> "检查文件锁冲突?" [label="是"];
-    "检查依赖满足?" -> "跳过（blocked）" [label="否"];
-    "检查文件锁冲突?" -> "检查并行数未满?" [label="无冲突"];
-    "检查文件锁冲突?" -> "跳过（锁冲突）" [label="有冲突"];
-    "检查并行数未满?" -> "启动任务";
-    "检查并行数未满?" -> "等待空闲" [label="已满"];
-}
-```
-
-## 快速参考
-
-### 初始化任务队列
+### Step 1: 任务拆分（用户说"计划"时）
 
 ```bash
-mkdir -p .dispatcher/SUMMARY .dispatcher/CACHE .dispatcher/LOGS
+# 用户需求 → 输出 TASKS.json
 cat > .dispatcher/TASKS.json << 'EOF'
 {
   "version": "1.0",
-  "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "created_at": "...",
   "scheduler": {
     "max_parallel": 3,
     "retry_policy": { "max_attempts": 3, "backoff_seconds": [5, 25, 125] }
   },
   "tasks": [
-    {"id": "T1", "description": "...", "status": "pending", "depends_on": []}
+    {"id": "T1-1", "description": "...", "status": "pending", "depends_on": [], "priority": 1}
   ]
 }
 EOF
 ```
 
-### 扫描可运行任务
+### Step 2: 扫描可运行任务
 
 ```bash
+# 过滤 pending + 依赖满足 + 无锁冲突
 jq '[.tasks[] | select(.status == "pending") | select(
-  [.tasks[] | select(.id == .depends_on[]).status] | all(. == "completed" or . == "verified")
+  [.depends_on[] as $d | .tasks[] | select(.id == $d) | .status] | all(. == "completed" or . == "verified")
 )]' .dispatcher/TASKS.json
 ```
 
-## 失败恢复策略
+### Step 3: 自动调度（无需确认）
 
-| 错误类型 | 处理方式 |
-|----------|----------|
-| `retryable` | 指数退避重试（5s → 25s → 125s） |
-| `fatal` | 标记 fatal，停止调度，通知人工 |
-| `blocked` | 依赖项失败，等待依赖解决后自动重试 |
+主 agent 直接：
+1. 启动子 agent 执行任务
+2. 更新状态为 running
+3. 记录到 audit_log
 
-### Checkpoint 机制
+### Step 4: 监控完成
 
-每个任务完成后写入：
-1. `SUMMARY/{task_id}.json` - 结果摘要
-2. `CACHE/{task_id}_hash.json` - 输入 hash
-3. 更新 `TASKS.json` 中任务状态
+等待子 agent 完成 → 读取 SUMMARY → 验证 → 更新状态
 
-重跑时：
-1. 计算当前输入 hash
-2. 对比缓存 hash
-3. 相同 → 直接返回缓存结果
+### Step 5: 继续调度
+
+扫描新一轮 pending 任务 → 重复 Step 3-4 直到全部完成
 
 ## 质量验证
 
-### 验证时机
+| 验证项 | 方式 |
+|--------|------|
+| 格式验证 | summary.json 符合 schema |
+| 产物验证 | artifacts 存在且非空 |
+| 逻辑验证 | （可选）lint/test |
 
-```
-子 Agent 完成 → Master 检查 → 通过 → 标记 verified
-                              → 失败 → 触发重试或人工介入
-```
+## 失败处理
 
-### 验证内容
-
-1. **结构验证**：summary.json 格式正确
-2. **产物验证**：artifacts 文件存在且非空
-3. **逻辑验证**：(可选) 运行 lint/test
-4. **一致性验证**：检查依赖的任务是否匹配
-
-## 文件锁机制
-
-防止并行任务同时写同一文件：
-
-```json
-{
-  "file_locks": {
-    "src/auth/login.ts": "T4-2",
-    "src/auth/styles.css": "T4-2"
-  }
-}
-```
-
-调度前检查：
-- 新任务的 artifacts 与现有锁冲突 → 不能并行
-- 任务完成后自动释放锁
-
-## 常见错误
-
-| 错误 | 原因 | 解决 |
-|------|------|------|
-| `cyclic_dependency` | 任务依赖形成环 | 检查 depends_on 字段 |
-| `file_lock_conflict` | 两个任务写同一文件 | 拆分任务或串行化 |
-| `context_overflow` | 上下文超过限制 | 减少 max_parallel |
-| `orphan_task` | 依赖任务不存在 | 检查 depends_on ID |
-| `missing_summary` | 任务完成但无摘要 | 修复子 agent 输出格式 |
+| 错误类型 | 处理 |
+|----------|------|
+| `retryable` | 指数退避重试（5s → 25s → 125s） |
+| `fatal` | 标记 fatal，通知用户 |
+| `blocked` | 依赖失败，等待解决 |
 
 ## 模板文件
 
-- `master-prompt.md` - Master Agent 调度逻辑
+- `master-prompt.md` - Master Agent 调度逻辑（含任务拆分）
 - `sub-prompt.md` - Sub Agent 执行规范
-- `TASKS.schema.json` - TASKS.json 完整 Schema
-- `summary.schema.json` - 子 Agent 摘要 Schema
+- `TASKS.schema.json` - 任务定义 Schema
+- `summary.schema.json` - 摘要 Schema
 
-## 脚本工具
+## 初始化脚本
 
-- `scripts/init.sh` - 初始化调度器目录
+```bash
+# 创建调度器目录
+mkdir -p .dispatcher/SUMMARY .dispatcher/CACHE .dispatcher/LOGS
+```
 
 ---
 
-*Multi-Agent Dispatcher v1.1 | 2026-04-23*
+*Multi-Agent Dispatcher v2.0 | 2026-04-23*

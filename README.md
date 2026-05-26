@@ -1,172 +1,214 @@
 # Multi-Agent Dispatcher
 
-**File-Driven Multi-Agent Task Orchestration Framework for Claude Code**
+**A file-driven multi-agent orchestration skill for large, resumable, evidence-verified agent work.**
 
-> **Context window = RAM** — volatile, finite. **Filesystem = Disk** — persistent, unlimited. When context is scarce, write to disk.
-
----
-
-## The Problem
-
-Large Language Models operate under a fundamental constraint: **context is finite and precious**. Every token spent on task state is a token not spent on reasoning. In long-running agentic workflows, this creates a compounding problem:
-
-| Without Persistence | With Persistence |
-|---------------------|------------------|
-| Task state lives in context | Task state lives on disk |
-| Lost on context overflow | Survives any interruption |
-| Grows linearly with complexity | Bounded by disk space |
-| Fragile, hard to audit | Transparent, easy to review |
-
-Existing approaches solve this with elaborate in-memory state management, complex orchestration schemas, or rigid pipeline definitions. We took a different approach: **treat the filesystem as the source of truth.**
+> v4.0.0 changes the project from a simple auto-dispatch prompt into a closed-loop multi-agent operating protocol: spec, DAG, bounded sub-agents, progress ledger, evidence verification, stop/rollback, merge, and handoff.
 
 ---
 
-## Core Principles
+## What It Solves
 
-### 1. Task State Persistence
+Multi-agent work usually fails in predictable ways:
 
-All task decomposition, scheduling decisions, and execution state live in human-readable markdown files — not in model context.
+- The manager loses state after context grows.
+- Sub-agents overlap ownership and create merge conflicts.
+- Reports become long chat transcripts instead of reusable artifacts.
+- Executors mark unfinished stubs or unverified UI as complete.
+- High-impact operations continue without a clear stop or rollback point.
 
-- `task_plan.md` — Master task list with dependency graph and status
-- `progress.md` — Real-time execution log
-- `findings.md` — Architectural decisions and learnings
-
-### 2. Autonomous Execution
-
-Once tasks are decomposed, the dispatcher operates without interruption. No confirmation prompts, no manual scheduling — the master agent coordinates sub-agents until completion.
-
-### 3. Clean Sub-Agent Context
-
-Each sub-agent receives only the minimal input it needs:
-```json
-{
-  "task_id": "T2-1",
-  "description": "Implement CSS styling",
-  "depends_on": [],
-  "artifacts_expected": ["styles.css"],
-  "working_dir": "/path/to/project"
-}
-```
-No cross-contamination, no information leakage between agents.
-
-### 4. Crash Recovery
-
-When context is compressed (or a session is interrupted), the agent recovers via a 5-question self-diagnosis:
-
-1. **Where am I?** → `[~]` tasks in `task_plan.md`
-2. **Where am I going?** → `[ ]` pending tasks
-3. **What's the goal?** → Top of `task_plan.md`
-4. **What have I learned?** → `findings.md`
-5. **What happened?** → `progress.md`
+This skill treats the filesystem as durable task state and makes the manager responsible for convergence.
 
 ---
 
-## Architecture
+## User Benefits
 
-```
-User Input
-    │
-    ▼
-┌─────────────┐
-│ Master Agent │  ← Decompiles → Writes task_plan.md
-└─────────────┘
-    │
-    ├── T1-1 ──┬──→ Sub-Agent-1
-    │
-    ├── T2-1 ──┼──→ Sub-Agent-2  (parallel execution)
-    │
-    └── T2-2 ──┴──→ Sub-Agent-3
-    │
-    ▼
-File System (SSOT)
-    │
-    ▼
-Master Agent ← Monitors → Sub-Agent Results
-    │
-    ▼
-User Report
-```
+### Resumable Long Tasks
 
-### State Machine
+Task state is written under `<project>/workspace/<task-slug>/`, so the manager can resume from previous specs, ledgers, reports, and handoffs.
 
-```
-pending → running → completed/verified
-                    ↘ failed → retry (max 3) → fatal
-```
+### Cleaner Delegation
+
+Each sub-agent gets bounded ownership: files, responsibility, expected report, evidence, and stop conditions.
+
+### Evidence-Based Completion
+
+Sub-agent completion is not final completion. The manager or evaluator verifies with tests, build output, browser checks, readback, logs, screenshots, or CI evidence.
+
+### Safer High-Impact Work
+
+Production data, publishing, permission changes, paid APIs, destructive actions, repeated failures, and ownership conflicts trigger stop/re-plan behavior.
+
+### Better Alignment Before Dispatch
+
+When the plan is unclear, alignment mode asks exactly one question at a time and includes the manager's recommended answer.
 
 ---
 
-## Why This Approach
+## When To Use
 
-### Token Efficiency
+Use this skill when the user explicitly asks for:
 
-By offloading task state to files, the context window is reserved for high-value operations: reasoning, code generation, and decision-making. Sub-agents operate in isolated, minimal contexts.
+- multi-agent work
+- sub-agents
+- delegation
+- parallel agents
+- DAG scheduling
+- worktree-based parallel execution
+- 分头处理 / 分别派 / 拆给不同 agent
+- multi-agent work that must be resumable or evidence-verified
 
-### Horizontal Scalability
-
-Tasks with no interdependencies execute in parallel. The dispatcher automatically batches and sequences based on dependency graphs.
-
-### Failure Isolation
-
-A sub-agent failure doesn't cascade. The state machine handles retries with exponential backoff, and fatal failures are logged for human review.
-
-### Auditability
-
-Every decision, every state change, every artifact is captured in plain text. You can reconstruct the entire execution history from the files.
+Do **not** use it merely because a task is large. If the user has not authorized multi-agent execution, propose it briefly or proceed as a single agent.
 
 ---
 
-## Quick Start
+## Operating Loop
+
+```text
+Context Intake
+-> Spec
+-> Artifact Directory
+-> DAG / Stage Gate
+-> Sub-Agent Execution
+-> Progress Ledger
+-> Verification
+-> Stop/Rollback Check
+-> Merge
+-> Handoff
+```
+
+The manager owns scheduling, state, merge, and final acceptance. Sub-agents own bounded execution units.
+
+---
+
+## Install
 
 ```bash
-# Install
-cp -r multi-agent-dispatcher ~/.claude/skills/
-
-# Trigger (say this to Claude Code)
-"帮我计划一下做一个待办应用"
+cp -R multi-agent-dispatcher ~/.codex/skills/
 ```
 
-The dispatcher will:
-1. Decompose the request into tasks
-2. Write `task_plan.md` with the execution plan
-3. Auto-dispatch sub-agents in parallel
-4. Monitor and verify results
-5. Report completion
+Then ask Codex for explicitly delegated work, for example:
 
----
-
-## File Structure
-
-```
-skill/
-├── SKILL.md              # Skill entry point
-├── master-prompt.md     # Master agent orchestration logic
-└── sub-prompt.md        # Sub-agent execution spec
-
-project/
-├── task_plan.md         # Task plan & dependency graph
-├── findings.md          # Architectural decisions
-├── progress.md          # Execution log
-└── src/                 # Generated artifacts
+```text
+这个项目有前端、后端、测试三块，帮我用多个 agent 并行做，但要有验收证据。
 ```
 
 ---
 
-## Comparison
+## Repository Structure
 
-| Feature | Traditional | Multi-Agent Dispatcher |
-|---------|-------------|------------------------|
-| Task persistence | In-memory | File-based |
-| Context usage | High (grows with tasks) | Minimal (offloaded) |
-| Recovery after crash | Requires full restart | Auto-resume from files |
-| Parallel execution | Manual scheduling | Automatic dependency-aware |
-| Audit trail | Hidden in context | Human-readable files |
-| Sub-agent isolation | Often coupled | Guaranteed minimal input |
+```text
+multi-agent-dispatcher/
+├── SKILL.md
+├── README.md
+├── master-prompt.md
+├── sub-prompt.md
+├── agents/
+│   └── openai.yaml
+├── references/
+│   ├── closed-loop-pattern.md
+│   ├── eval_cases.md
+│   ├── roles.md
+│   └── stop-conditions.md
+├── scripts/
+│   ├── init_run.py
+│   └── validate_report.py
+└── templates/
+    ├── evaluator_report.md
+    ├── progress_ledger.md
+    ├── subagent_report.md
+    ├── subagent_task.md
+    └── task_spec.md
+```
 
 ---
 
-## Credits
+## Artifact Directory
 
-Built for Claude Code Agent Skills system.
+For full artifact mode, initialize a run:
 
-*v3.0 | 2026-04-23*
+```bash
+python3 scripts/init_run.py \
+  --project-root /path/to/project \
+  --title "Checkout Refactor" \
+  --agents frontend,backend,tests
+```
+
+This creates:
+
+```text
+/path/to/project/workspace/checkout-refactor/
+├── task_spec.md
+├── progress.md
+├── evaluator_report.md
+└── tasks/
+    ├── 1.1-frontend.md
+    ├── 1.2-backend.md
+    └── 1.3-tests.md
+```
+
+---
+
+## Sub-Agent Return Contract
+
+Each sub-agent returns only four lines:
+
+```text
+状态：已完成 / 失败 / 需要决策
+报告：<artifact-dir>/X.Y-xxx.md
+产出：N 个文件（列出路径）
+决策点：[如有，一句话描述]
+```
+
+Detailed findings go into the report file, not chat.
+
+---
+
+## Report Validation
+
+Validate a sub-agent report before relying on it:
+
+```bash
+python3 scripts/validate_report.py <artifact-dir>/1.1-frontend-report.md --type subagent
+```
+
+Supported artifact types:
+
+- `spec`
+- `progress`
+- `subagent`
+- `evaluator`
+
+---
+
+## Roles
+
+The skill defines explicit role boundaries:
+
+- **Manager:** owns spec, DAG, state, merge, and final acceptance.
+- **Explorer:** answers scoped codebase questions; does not edit.
+- **Worker:** implements a bounded slice with clear ownership.
+- **Evaluator:** checks acceptance criteria and may return FAIL.
+- **Merger:** reads reports, resolves conflicts, and runs integration verification.
+
+See [`references/roles.md`](references/roles.md).
+
+---
+
+## v4.0.0 Highlights
+
+- Reworked the skill around a closed-loop multi-agent protocol.
+- Added alignment mode: one question at a time, with a recommended answer.
+- Added artifact initialization via `scripts/init_run.py`.
+- Added report structure validation via `scripts/validate_report.py`.
+- Added durable templates for specs, progress ledgers, sub-agent reports, and evaluator reports.
+- Added role boundaries for manager, explorer, worker, evaluator, and merger.
+- Added explicit stop/rollback rules for high-impact operations and repeated failures.
+- Added eval cases for trigger behavior, false positives, continuation, UI verification, and alignment mode.
+
+---
+
+## Version
+
+**v4.0.0** · 2026-05-26
+
+Previous public version: **v3.0** · 2026-04-23

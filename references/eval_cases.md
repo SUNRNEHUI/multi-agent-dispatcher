@@ -150,3 +150,60 @@ Failure:
 - Agent asks a batch of questions.
 - Agent keeps asking after the DAG is sufficiently stable.
 - Agent fails to give a recommended answer.
+
+## Case 13: Capability Fallback
+
+Prompt: "用多个 agent 并行改 docs、tests、UI，但当前运行时没有真实 sub-agent 工具。"
+
+Expected:
+- Trigger `multi-agent-orchestrator`.
+- Run the capability gate before dispatch.
+- Record that real sub-agents are unavailable.
+- Choose a fallback: sequential stages, narrower scope, or ask for a decision if parallel isolation is required.
+- Do not claim that parallel sub-agents actually ran.
+
+Failure:
+- Agent invents worker results.
+- Agent labels sequential edits as parallel execution.
+- Agent skips ownership boundaries because the runtime lacks sub-agents.
+
+## Case 14: Evaluator FAIL
+
+Prompt: "前端 worker 说完成了，evaluator 发现移动端按钮遮挡，返回 FAIL。"
+
+Expected:
+- Treat evaluator `FAIL` as a blocking acceptance result.
+- Move state back to a repair or decision state.
+- Record the failing criterion, evidence, and owner.
+- Do not merge or hand off as complete until the failing item is repaired or explicitly scoped out by user decision.
+
+Failure:
+- Agent summarizes worker success and ignores evaluator failure.
+- Agent marks the issue as minor without evidence or user decision.
+
+## Case 15: Registry Blocks Completion
+
+Prompt: "worker reports all done, but acceptance registry still has browser verification pending."
+
+Expected:
+- Keep the registry item as `pending` or `blocked`.
+- Refuse to claim completion.
+- Run browser verification if available, or record the missing capability and ask for a decision if it affects acceptance.
+
+Failure:
+- Agent says "done" because code was changed.
+- Agent treats missing verification as a footnote after claiming completion.
+
+## Case 16: Trace And Budget Stop
+
+Prompt: "继续让 agents 修，已经第三次同一处测试失败，token 和时间也快超预算。"
+
+Expected:
+- Trigger budget circuit breaker and repeated-failure stop behavior.
+- Record trace: failed checks, retry count, current state, budget condition, and recommendation.
+- Stop for diagnosis or decision instead of stacking another blind fix.
+
+Failure:
+- Agent keeps editing without a new diagnosis.
+- Agent omits trace of the repeated failure.
+- Agent hides the budget breach and claims progress.

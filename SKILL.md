@@ -19,15 +19,29 @@ Do not silently infer multi-agent execution merely because a task is broad. If m
 
 The manager owns scheduling, state, merge, and final acceptance. Sub-agents own bounded execution units.
 
+This is a harness protocol, not just a checklist. When full artifact mode is active, the manager must produce durable state and verification evidence before claiming completion.
+
 ## Core Loop
 
 Run multi-agent tasks through this sequence:
 
 ```text
-Context Intake -> Spec -> Artifact Directory -> DAG / Stage Gate -> Sub-Agent Execution -> Progress Ledger -> Verification -> Stop/Rollback Check -> Merge -> Handoff
+Context Intake -> Capability Gate -> Spec -> Artifact Directory -> DAG / Plan Gate -> Sub-Agent Execution -> State Update -> Verification Gate -> Stop/Rollback Check -> Merge -> Handoff
 ```
 
 Use real delegation or sub-agent tools only when they are available. When the user explicitly asks for real sub-agents, check the active tools or tool discovery if available before falling back. If no such tool is available, do not pretend to run parallel agents; create the DAG and execute stages sequentially or explain the limitation.
+
+## Protocol Gates
+
+For full artifact mode, the manager must pass these gates:
+
+1. **Capability Gate:** record the current runtime abilities and fallback plan.
+2. **Plan Gate:** define the DAG, ownership, budgets, verification method, and stop conditions.
+3. **State Gate:** write stage/task status to durable artifacts after every meaningful stage.
+4. **Verification Gate:** map evidence to acceptance criteria before PASS.
+5. **Supervision Gate:** stop when budget, risk, ownership, or verification rules require it.
+
+If a gate cannot be satisfied, stop with `BLOCKED` or `需要决策` and leave a handoff. Do not replace missing evidence with a confident summary.
 
 ## When To Apply
 
@@ -57,7 +71,11 @@ Prefer existing project planning, issue, or workspace conventions. If none exist
 Recommended files:
 
 - `task_spec.md`: goal, non-goals, constraints, acceptance criteria, verification evidence, risks, budget, and stop conditions.
-- `progress.md`: current goal, completed work, changed files, decisions, commands, evidence, risks, and next step.
+- `capability_snapshot.md`: available sub-agent, browser, worktree, shell, network, MCP, approval, and publish/deploy capabilities plus fallback plan.
+- `run_state.json`: machine-readable stages, tasks, status, budgets, retries, evidence ids, and stop reasons.
+- `acceptance_registry.json`: acceptance criteria, required evidence, current status, and blocking issues.
+- `progress.md`: human-readable current goal, stage status, changed files, decisions, commands, evidence, risks, and next step.
+- `trace.jsonl`: append-only run events such as plan gate, agent spawn, tool evidence, verification, stop, merge, and handoff.
 - `X.Y-<agent>.md`: each sub-agent report.
 - `evaluator_report.md`: pass/fail evidence for high-risk, UI, release, or user-facing tasks.
 
@@ -78,6 +96,23 @@ Before planning:
 - Check for previous sub-agent runs, reports, worktrees, or temporary resources that should be reused, closed, or left untouched.
 - If the user explicitly asked for real sub-agents, confirm the available delegation mechanism before assigning work.
 - Inspect git status before using worktrees. Do not overwrite or revert unrelated user changes.
+
+## Capability Gate
+
+Before assigning agents, record what the current runtime can actually do:
+
+- Real sub-agent or delegation mechanism: available / unavailable.
+- Forked workspace or `git worktree`: available / unavailable.
+- Shell, filesystem, browser, network, MCP, and external service access.
+- Approval model for destructive, paid, publishing, permission, or production-data actions.
+- Fallback plan when real parallelism is unavailable.
+
+Use the strongest available runtime path, but keep the core protocol stable:
+
+- Codex-style runs should rely on project `AGENTS.md`, installed skills, available tools, sandbox/approval state, shell verification, and browser/MCP tools when present.
+- Claude Code-style runs may use configured subagents, foreground/background execution, worktrees, hooks, and `CLAUDE.md`/memory files when present.
+
+If real parallelism is unavailable, keep the DAG and execute stages sequentially. Do not simulate agent completion.
 
 ## Question-Driven Alignment
 
@@ -102,10 +137,19 @@ Before spawning sub-agents, define:
 - Stage number and dependencies.
 - File or responsibility ownership for each sub-agent.
 - Verification expected from each sub-agent.
+- Budget for the run and each stage: time, turns/tool calls if measurable, retry count, and external cost constraints.
 - Merge order and conflict handling.
 - What the manager should do locally while agents run.
 
 Model the work as a DAG: parallel tasks share the same stage number; dependent tasks move to later stages.
+
+For full artifact mode, mirror the DAG in `run_state.json` and mirror acceptance criteria in `acceptance_registry.json`. Each task should have: `id`, `stage`, `owner`, `status`, `allowed_scope`, `dependencies`, `expected_outputs`, `verification`, `evidence`, `retry_count`, and `stop_reason`.
+
+Use separate status vocabularies:
+
+- Run status: `intake`, `gated`, `specified`, `dispatched`, `reported`, `evaluating`, `accepted`, `handed_off`, `blocked`, `needs_decision`, `failed`.
+- Stage/task status: `planned`, `ready`, `running`, `blocked`, `verify_failed`, `passed`, `merged`, `cancelled`.
+- Acceptance status: `pending`, `pass`, `fail`, `blocked`, `scoped_out`.
 
 ## Worktree Isolation
 
@@ -142,6 +186,8 @@ When a sub-agent returns a report path, validate its structure before relying on
 python3 <skill-dir>/scripts/validate_report.py <artifact-dir>/X.Y-xxx.md --type subagent
 ```
 
+After reading the report, the manager must update `run_state.json` or `progress.md` with status and evidence. A sub-agent status of `已完成` only means the bounded slice is ready for manager/evaluator review; it is not final acceptance.
+
 ## Verification
 
 Sub-agents may report evidence, but the manager or an evaluator owns final acceptance.
@@ -154,6 +200,13 @@ Prefer external evidence over self-assessment:
 
 Reject outputs that package stubs, TODOs, mocks, or untested critical paths as completion. For Web/UI work, browser-level verification is required when a browser is available and the UI path matters.
 
+For full artifact mode:
+
+- Every acceptance criterion in `acceptance_registry.json` must be `pass`, `blocked`, or `scoped_out` before final handoff.
+- Final success requires no `fail` or `blocked` acceptance item.
+- Evaluator reports must use `PASS`, `FAIL`, or `BLOCKED`.
+- A `FAIL` or `BLOCKED` evaluator result must update the next stage, stop reason, or required fix list.
+
 ## Stop And Rollback
 
 Stop and re-plan instead of adding more agents when:
@@ -164,8 +217,11 @@ Stop and re-plan instead of adding more agents when:
 - File ownership conflicts between agents.
 - The task depends on unavailable credentials, services, or environments.
 - Multiple viable paths remain and the choice affects product or maintenance direction.
+- The current stage exceeds its budget or would consume more context/time/tool calls without new evidence.
 
 Preserve rollback paths such as git diff, worktree isolation, backups, dry-runs, previews, readback checks, or old config values.
+
+When stopping, record `stop_reason`, current evidence, changed files, rollback path, and the exact decision needed. Stopping with a clear ledger is successful supervision, not failure.
 
 ## Merge And Handoff
 
@@ -183,12 +239,14 @@ End with:
 ## Reference Loading
 
 - Read `references/closed-loop-pattern.md` when designing or revising the orchestration loop.
+- Read `references/harness-protocol.md` when deciding which control layers should be hard protocol versus lightweight guidance.
 - Read `references/roles.md` when deciding whether to spawn explorers, workers, evaluators, or mergers.
 - Read `references/stop-conditions.md` when a task has high impact, ambiguous scope, repeated failures, or external side effects.
 - Read `references/eval_cases.md` when testing whether this skill triggers and behaves correctly.
+- Read `adapters/codex.md` or `adapters/claude-code.md` when the target runtime is known and runtime-specific controls matter.
 - Use `scripts/init_run.py` to create durable artifacts and `scripts/validate_report.py` to check reports.
 - Use `templates/task_spec.md`, `templates/progress_ledger.md`, `templates/subagent_task.md`, `templates/subagent_report.md`, and `templates/evaluator_report.md` when scripts are not suitable.
 
 ---
 
-*Multi-Agent Dispatcher v4.0.0 | 2026-05-26*
+*Multi-Agent Dispatcher v5.0.0 | 2026-05-26*

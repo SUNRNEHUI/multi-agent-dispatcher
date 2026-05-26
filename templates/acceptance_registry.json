@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "created_at": "",
+  "title": "",
+  "criteria": [
+    {
+      "id": "AC-001",
+      "description": "",
+      "status": "pending",
+      "required_evidence": [],
+      "evidence": [],
+      "owner": "main-agent",
+      "linked_tasks": [],
+      "blocking_issues": []
+    }
+  ]
+}

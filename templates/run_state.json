@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "created_at": "",
+  "updated_at": "",
+  "title": "",
+  "artifact_dir": "",
+  "status": "intake",
+  "current_stage": "1",
+  "stages": [
+    {
+      "id": "1",
+      "name": "initial execution",
+      "status": "planned",
+      "tasks": [],
+      "budget": "",
+      "evidence": [],
+      "stop_reason": ""
+    }
+  ],
+  "tasks": [],
+  "task_shape": {
+    "id": "1.1",
+    "name": "",
+    "stage": 1,
+    "status": "planned",
+    "owner": "",
+    "allowed_scope": [],
+    "task_path": "tasks/1.1-example.md",
+    "report_path": "1.1-example-report.md",
+    "dependencies": [],
+    "expected_outputs": [],
+    "verification": [],
+    "retry_count": 0,
+    "budget": "",
+    "evidence": [],
+    "stop_reason": ""
+  },
+  "generated_files": [],
+  "stop_reason": ""
+}

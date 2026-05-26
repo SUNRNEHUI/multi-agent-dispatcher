@@ -1,6 +1,8 @@
 # Evaluator Report
 
-Result: PASS / FAIL
+Result: BLOCKED
+
+Allowed results: PASS / FAIL / BLOCKED
 
 ## Scope Checked
 

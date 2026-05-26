@@ -1,8 +1,8 @@
 # Multi-Agent Dispatcher
 
-**A file-driven multi-agent orchestration skill for large, resumable, evidence-verified agent work.**
+**A harness protocol for large, resumable, evidence-verified multi-agent work.**
 
-> v4.0.0 changes the project from a simple auto-dispatch prompt into a closed-loop multi-agent operating protocol: spec, DAG, bounded sub-agents, progress ledger, evidence verification, stop/rollback, merge, and handoff.
+> v5 evolves the project from protocol guidance into a manager-enforced dispatch harness: the main agent must gate capabilities, advance a state machine, require acceptance evidence, enforce budget stops, keep traceable state, and adapt the same core protocol to different agent runtimes.
 
 ---
 
@@ -16,7 +16,7 @@ Multi-agent work usually fails in predictable ways:
 - Executors mark unfinished stubs or unverified UI as complete.
 - High-impact operations continue without a clear stop or rollback point.
 
-This skill treats the filesystem as durable task state and makes the manager responsible for convergence.
+This skill treats the filesystem as durable task state and makes the manager responsible for convergence. In v5, the important change is not more process; it is that the process becomes a protocol the manager must run before it can claim completion.
 
 ---
 
@@ -33,6 +33,17 @@ Each sub-agent gets bounded ownership: files, responsibility, expected report, e
 ### Evidence-Based Completion
 
 Sub-agent completion is not final completion. The manager or evaluator verifies with tests, build output, browser checks, readback, logs, screenshots, or CI evidence.
+
+### Harness-Level Control
+
+The manager does not merely suggest good behavior. It runs protocol gates:
+
+- **Capability gate:** confirm which runtime controls are actually available before assigning work.
+- **State machine:** move the task through named states instead of drifting through chat.
+- **Acceptance registry:** bind each acceptance criterion to evidence and an owner.
+- **Budget circuit breaker:** stop when context, time, cost, retries, or tool calls exceed the stage budget.
+- **Trace:** record key decisions, commands, evidence, and stop reasons in durable files.
+- **Runtime adapters:** map the same core protocol onto Codex, Claude Code, or another harness without changing the task semantics.
 
 ### Safer High-Impact Work
 
@@ -65,18 +76,92 @@ Do **not** use it merely because a task is large. If the user has not authorized
 
 ```text
 Context Intake
--> Spec
+-> Capability Gate
+-> Spec / Acceptance Registry
 -> Artifact Directory
--> DAG / Stage Gate
--> Sub-Agent Execution
--> Progress Ledger
--> Verification
--> Stop/Rollback Check
+-> State Machine Stage Gate
+-> Bounded Execution
+-> Trace / Progress Ledger
+-> Verification / Evaluator
+-> Budget / Stop Check
 -> Merge
 -> Handoff
 ```
 
 The manager owns scheduling, state, merge, and final acceptance. Sub-agents own bounded execution units.
+
+## v5 Harness Protocol
+
+The harness protocol is the stable core that remains the same across runtimes.
+
+### 1. Capability Gate
+
+Before delegating, the manager records what is available in the current runtime:
+
+- real sub-agent or delegation mechanism
+- filesystem write access
+- shell and sandbox limits
+- worktree support
+- browser or UI verification capability
+- hook or instruction files that can carry protocol rules
+- external services, credentials, and network assumptions
+
+If a capability is missing, the manager must choose a fallback: execute sequentially, narrow scope, ask for a decision, or stop. It must not pretend that unavailable parallelism, browser checks, or evaluator isolation happened.
+
+### 2. State Machine
+
+The task advances through explicit states:
+
+```text
+INTAKE -> GATED -> SPECIFIED -> DISPATCHED -> REPORTED -> EVALUATING -> ACCEPTED -> HANDED_OFF
+```
+
+Stop states are first-class:
+
+```text
+BLOCKED -> NEEDS_DECISION -> FAILED
+```
+
+Each transition should leave a compact trace entry: current state, reason, owner, evidence path, and next state.
+
+### 3. Acceptance Registry
+
+Acceptance criteria are tracked as records, not prose. Each record should contain:
+
+- criterion
+- owner
+- required evidence
+- current status: `pending`, `pass`, `fail`, `blocked`, or `scoped_out`
+- evidence path or command result summary
+
+The manager cannot claim completion while any required registry item is not `pass` or explicitly `scoped_out` by user decision.
+
+### 4. Budget Circuit Breaker
+
+Each stage should have a small budget envelope: time, context, tool calls, retries, cost, and external side effects. When the stage breaches the envelope, the manager stops and records whether to continue, split, reduce scope, or ask the user.
+
+The circuit breaker is meant to preserve resumability and prevent hidden burn, not to optimize for arbitrary limits.
+
+### 5. Trace
+
+Trace is the minimum durable evidence needed to resume and audit:
+
+- capability gate result
+- state transitions
+- worker report paths
+- evaluator result
+- budget stop or retry reason
+- final acceptance registry
+
+Trace can live in the progress ledger or a dedicated file when the run is complex. Chat alone is not durable state.
+
+### 6. Runtime Adapters
+
+Adapters explain how the same protocol maps onto each runtime's controls. They do not change the protocol.
+
+- Codex adapter: [`adapters/codex.md`](adapters/codex.md)
+- Claude Code adapter: [`adapters/claude-code.md`](adapters/claude-code.md)
+- Harness reference: [`references/harness-protocol.md`](references/harness-protocol.md)
 
 ---
 
@@ -100,6 +185,9 @@ Then ask Codex for explicitly delegated work, for example:
 multi-agent-dispatcher/
 ├── SKILL.md
 ├── README.md
+├── adapters/
+│   ├── claude-code.md
+│   └── codex.md
 ├── master-prompt.md
 ├── sub-prompt.md
 ├── agents/
@@ -107,17 +195,22 @@ multi-agent-dispatcher/
 ├── references/
 │   ├── closed-loop-pattern.md
 │   ├── eval_cases.md
+│   ├── harness-protocol.md
 │   ├── roles.md
 │   └── stop-conditions.md
 ├── scripts/
 │   ├── init_run.py
 │   └── validate_report.py
 └── templates/
+    ├── acceptance_registry.json
+    ├── capability_snapshot.md
     ├── evaluator_report.md
     ├── progress_ledger.md
+    ├── run_state.json
     ├── subagent_report.md
     ├── subagent_task.md
-    └── task_spec.md
+    ├── task_spec.md
+    └── trace.jsonl
 ```
 
 ---
@@ -137,8 +230,12 @@ This creates:
 
 ```text
 /path/to/project/workspace/checkout-refactor/
+├── acceptance_registry.json
+├── capability_snapshot.md
 ├── task_spec.md
 ├── progress.md
+├── run_state.json
+├── trace.jsonl
 ├── evaluator_report.md
 └── tasks/
     ├── 1.1-frontend.md
@@ -178,6 +275,8 @@ Supported artifact types:
 - `subagent`
 - `evaluator`
 
+When `acceptance_registry.json` or `run_state.json` sits next to `task_spec.md`, `progress.md`, or `evaluator_report.md`, validation also checks those protocol files.
+
 ---
 
 ## Roles
@@ -194,6 +293,45 @@ See [`references/roles.md`](references/roles.md).
 
 ---
 
+## Runtime Adapters
+
+The v5 protocol is runtime-neutral. Adapters document the practical control points:
+
+- where persistent instructions live
+- how tools and sandbox limits are discovered
+- how worktrees and file ownership are enforced
+- whether browser verification is available
+- how sub-agents or sequential fallbacks are represented
+- how hooks or local instruction files preserve the protocol
+- where trace and acceptance records should be written
+
+Start with the adapter for the runtime you are actually using, then run the same capability gate and acceptance registry either way.
+
+---
+
+## v5.0.0 Highlights
+
+- Upgraded the skill from protocol guidance into a manager-enforced harness protocol.
+- Added capability gate expectations and durable capability snapshots.
+- Added `run_state.json` for explicit run, stage, and task state.
+- Added `acceptance_registry.json` so completion is tied to evidence.
+- Added `trace.jsonl` for resumable and auditable run events.
+- Added evaluator result validation with `PASS`, `FAIL`, or `BLOCKED`.
+- Added runtime adapters for Codex and Claude Code-style harnesses.
+- Added v5 eval cases for capability fallback, evaluator failure, registry blocking, and budget stops.
+
+## Upgrade Notes
+
+v5 keeps the public skill purpose the same, but tightens the manager's responsibilities:
+
+- Treat multi-agent work as a protocol run, not a chat-only checklist.
+- Record actual runtime capabilities before dispatching workers.
+- Keep acceptance criteria in `acceptance_registry.json` and require evidence before completion.
+- Keep run progress in `run_state.json`, `progress.md`, and `trace.jsonl` so another manager can resume.
+- Use runtime adapters only to map the same protocol onto Codex, Claude Code, or similar harnesses.
+
+Existing v4 prompts and templates still map cleanly to v5, but long or risky tasks should use the new full artifact set.
+
 ## v4.0.0 Highlights
 
 - Reworked the skill around a closed-loop multi-agent protocol.
@@ -209,6 +347,6 @@ See [`references/roles.md`](references/roles.md).
 
 ## Version
 
-**v4.0.0** · 2026-05-26
+**v5.0.0** · 2026-05-26
 
-Previous public version: **v3.0** · 2026-04-23
+Previous public version: **v4.0.0** · 2026-05-26

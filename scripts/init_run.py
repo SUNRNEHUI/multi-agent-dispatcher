@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 from pathlib import Path
+from datetime import datetime, timezone
 
 
 TEMPLATE_MAP = {
@@ -43,6 +45,22 @@ def write_task_from_template(template_dir: Path, output_path: Path, agent: str, 
     return True
 
 
+def write_json(path: Path, data: object, force: bool) -> bool:
+    if path.exists() and not force:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
+def write_text(path: Path, content: str, force: bool) -> bool:
+    if path.exists() and not force:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create a multi-agent artifact directory from templates.")
     parser.add_argument("--project-root", default=".", help="Project root where workspace/<slug> will be created.")
@@ -71,6 +89,115 @@ def main() -> int:
     for index, agent in enumerate(agents, start=1):
         output_path = artifact_dir / "tasks" / f"1.{index}-{agent}.md"
         if write_task_from_template(template_dir, output_path, agent, index, args.force):
+            created.append(output_path)
+        else:
+            skipped.append(output_path)
+
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    task_items = [
+        {
+            "id": f"1.{index}",
+            "name": agent,
+            "stage": 1,
+            "status": "planned",
+            "owner": agent,
+            "allowed_scope": [],
+            "task_path": f"tasks/1.{index}-{agent}.md",
+            "report_path": f"1.{index}-{agent}-report.md",
+            "dependencies": [],
+            "expected_outputs": [],
+            "verification": [],
+            "retry_count": 0,
+            "budget": "",
+            "evidence": [],
+            "stop_reason": "",
+        }
+        for index, agent in enumerate(agents, start=1)
+    ]
+    stage_items = [
+        {
+            "id": "1",
+            "name": "initial execution",
+            "status": "planned" if task_items else "unplanned",
+            "tasks": [item["id"] for item in task_items],
+            "budget": "",
+            "evidence": [],
+            "stop_reason": "",
+        }
+    ]
+
+    generated_files = [
+        "task_spec.md",
+        "progress.md",
+        "evaluator_report.md",
+        "capability_snapshot.md",
+        "acceptance_registry.json",
+        "trace.jsonl",
+        "run_state.json",
+    ]
+    generated_files.extend(item["task_path"] for item in task_items)
+
+    protocol_files = {
+        "capability_snapshot.md": (
+            "# Capability Snapshot\n\n"
+            f"- created_at: {now}\n"
+            f"- title: {args.title}\n"
+            "- delegation_mechanism:\n"
+            "- available_tools:\n"
+            "- unavailable_tools:\n"
+            "- constraints:\n"
+            "- verification_environment:\n"
+        ),
+        "acceptance_registry.json": {
+            "version": 1,
+            "created_at": now,
+            "title": args.title,
+            "criteria": [
+                {
+                    "id": "AC-001",
+                    "description": "",
+                    "status": "pending",
+                    "required_evidence": [],
+                    "evidence": [],
+                    "owner": "main-agent",
+                    "linked_tasks": [item["id"] for item in task_items],
+                    "blocking_issues": [],
+                }
+            ],
+        },
+        "trace.jsonl": json.dumps(
+            {
+                "ts": now,
+                "event": "run_initialized",
+                "artifact_dir": str(artifact_dir),
+                "title": args.title,
+                "agents": agents,
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        "run_state.json": {
+            "version": 1,
+            "created_at": now,
+            "updated_at": now,
+            "title": args.title,
+            "artifact_dir": str(artifact_dir),
+            "status": "intake",
+            "current_stage": "1" if stage_items else "",
+            "stages": stage_items,
+            "tasks": task_items,
+            "generated_files": generated_files,
+            "stop_reason": "",
+        },
+    }
+
+    for output_name, content in protocol_files.items():
+        output_path = artifact_dir / output_name
+        if isinstance(content, str):
+            did_write = write_text(output_path, content, args.force)
+        else:
+            did_write = write_json(output_path, content, args.force)
+        if did_write:
             created.append(output_path)
         else:
             skipped.append(output_path)

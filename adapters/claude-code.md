@@ -1,0 +1,90 @@
+# Claude Code Runtime Adapter
+
+This adapter maps the v5 harness protocol onto Claude Code or similar code-harness environments. It focuses on practical control points: local instructions, tools, sandboxing, subagents, hooks, worktrees, and acceptance evidence.
+
+## Persistent Instructions
+
+Use the most specific instruction source available:
+
+- repository or directory `CLAUDE.md`
+- user or project harness instructions
+- task artifacts created for the current run
+- local hook configuration when it exists and is relevant
+
+The manager should treat instruction files as policy inputs, not as evidence. Acceptance still requires concrete checks.
+
+## Capability Gate
+
+Record the actual controls available in the current Claude Code session:
+
+- filesystem write scope
+- shell and sandbox behavior
+- network assumptions
+- available tools
+- browser or UI verification route, if any
+- subagent support, if configured
+- hook support for preflight, post-tool, or notification behavior
+- whether git worktrees are safe for this repository state
+
+If a named control is not present in the active runtime, mark it unavailable and choose a fallback.
+
+## Filesystem, Worktrees, And Ownership
+
+Claude Code-style harnesses often run close to the repository. The manager should:
+
+- read the current repository instructions before modifying files
+- inspect git status before creating worktrees or merging outputs
+- assign disjoint file or responsibility surfaces to workers
+- keep generated artifacts in an agreed task directory
+- never overwrite unrelated local changes without user direction
+
+Worktrees are an isolation option, not a default requirement. Use them when parallel edits would otherwise collide or when rollback value is high.
+
+## Tools, Browser, And Evidence
+
+Tool availability varies by harness configuration. The manager should record:
+
+- which command checks were run
+- which files or logs were read
+- whether browser verification was possible
+- whether UI evidence came from screenshots, interaction, console checks, or a declared fallback
+
+If user-facing UI cannot be checked in the active environment, the acceptance registry item should remain `blocked` or require a user decision. It should not become `pass` merely because code was changed.
+
+## Subagents
+
+When subagents are available, each assignment should include:
+
+- exact ownership boundary
+- required output path
+- evidence required for acceptance
+- stop conditions
+- instruction to avoid reverting unrelated changes
+- four-line return contract
+
+When subagents are not available, run the protocol as sequential stages and record that fallback. The core state machine remains useful even without parallel execution.
+
+## Hooks
+
+Hooks can help enforce or record the harness:
+
+- preflight checks before risky operations
+- post-command trace capture
+- report validation
+- notification or stop behavior
+
+Hooks are support rails, not the source of truth. The manager still owns state transitions, registry status, and final acceptance.
+
+## Trace Placement
+
+For long or resumable work, keep trace next to the task spec and progress ledger. A minimal Claude Code trace should include:
+
+- instruction files consulted
+- capability gate result
+- state transitions
+- subagent or sequential-stage reports
+- evaluator result
+- acceptance registry status
+- budget breaker events
+
+The final handoff should point to the trace and registry rather than re-explaining every tool call in chat.

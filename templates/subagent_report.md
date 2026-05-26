@@ -8,11 +8,19 @@
 
 ## Evidence
 
+- Command / check:
+- Result:
+- Evidence path or output summary:
+
 ## Unresolved Risks
 
 ## Assumptions Affecting Merge
 
 ## Stub TODO Mock Or Unverified Path
+
+- Stub/TODO/mock found:
+- Untested critical path:
+- External dependency not exercised:
 
 ## Return Summary
 

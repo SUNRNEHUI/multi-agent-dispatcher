@@ -1,4 +1,4 @@
 interface:
   display_name: "Multi-Agent Dispatcher"
-  short_description: "多 Agent 长任务编排、状态续跑、验证证据与结果收敛"
-  default_prompt: "Use $multi-agent-dispatcher to split this large task into bounded agents, track progress, verify evidence, and converge the result."
+  short_description: "智能判断是否需要多 Agent，并在长任务中编排、续跑与验收"
+  default_prompt: "Use $multi-agent-dispatcher to decide whether this task warrants multi-agent dispatch; if it does, split it into bounded agents, track progress, verify evidence, and converge the result."

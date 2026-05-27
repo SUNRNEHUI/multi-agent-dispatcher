@@ -13,6 +13,10 @@ Use the most specific instruction source available:
 
 The manager should treat instruction files as policy inputs, not as evidence. Acceptance still requires concrete checks.
 
+## Right-Sizing Gate
+
+In Claude Code-style harnesses, configured subagents can make dispatch easy enough to overuse. Still run the right-sizing decision first. For small edits, narrow bugs, direct commands, or one-file changes, skip subagents and complete the work directly with normal verification.
+
 ## Capability Gate
 
 Record the actual controls available in the current Claude Code session:

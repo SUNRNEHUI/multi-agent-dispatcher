@@ -13,6 +13,10 @@ Use the most specific instruction source available:
 
 Project rules override broader rules when they conflict. The manager should read the relevant files before editing and record any protocol-relevant constraints in the trace.
 
+## Right-Sizing Gate
+
+In Codex, skill loading and actual dispatch are separate decisions. If the user mentions multi-agent work for a tiny edit, use the skill to decide that dispatch is unnecessary, then complete the task directly. Do not spawn workers, create worktrees, or initialize artifact directories unless delegation is justified.
+
 ## Capability Gate
 
 Record the actual session capabilities before dispatch:

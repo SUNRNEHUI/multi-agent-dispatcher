@@ -6,12 +6,21 @@ This reference defines the v5 core protocol. It is intentionally separate from a
 
 The harness turns multi-agent orchestration from advice into a required control loop:
 
-1. discover actual runtime capabilities
-2. create a bounded spec and acceptance registry
-3. advance through explicit states
-4. collect worker and evaluator evidence
-5. stop on budget or safety breaks
-6. claim completion only when required acceptance records pass
+1. decide whether multi-agent dispatch is justified
+2. discover actual runtime capabilities
+3. create a bounded spec and acceptance registry
+4. advance through explicit states
+5. collect worker and evaluator evidence
+6. stop on budget or safety breaks
+7. claim completion only when required acceptance records pass
+
+## Right-Sizing Gate
+
+Explicit multi-agent wording authorizes the manager to evaluate dispatch. It does not require dispatch.
+
+The manager should skip multi-agent orchestration when the task is small, localized, lacks clean ownership boundaries, or would cost more to coordinate than to complete directly. In that case, the manager should say so briefly, execute as a single agent, and verify normally without creating run artifacts.
+
+The manager should proceed with multi-agent dispatch when delegation materially helps because the work is parallelizable, long, resumable, risky, evaluator-sensitive, or benefits from isolated ownership and rollback.
 
 ## Required Records
 

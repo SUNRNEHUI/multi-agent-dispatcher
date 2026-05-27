@@ -68,4 +68,4 @@ Return `需要决策` when:
 
 ---
 
-*Sub-Agent Prompt v5.0.0 | 2026-05-26*
+*Sub-Agent Prompt v5.0.1 | 2026-05-27*

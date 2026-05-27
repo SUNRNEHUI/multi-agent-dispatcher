@@ -18,6 +18,8 @@ Multi-agent work usually fails in predictable ways:
 
 This skill treats the filesystem as durable task state and makes the manager responsible for convergence. In v5, the important change is not more process; it is that the process becomes a protocol the manager must run before it can claim completion.
 
+It also avoids over-delegation: if the user asks for multi-agent execution on a tiny task, the manager first decides whether dispatch is actually useful. Small edits should be completed directly by one agent.
+
 ---
 
 ## User Benefits
@@ -57,7 +59,7 @@ When the plan is unclear, alignment mode asks exactly one question at a time and
 
 ## When To Use
 
-Use this skill when the user explicitly asks for:
+Load this skill when the user explicitly asks for:
 
 - multi-agent work
 - sub-agents
@@ -68,6 +70,8 @@ Use this skill when the user explicitly asks for:
 - 分头处理 / 分别派 / 拆给不同 agent
 - multi-agent work that must be resumable or evidence-verified
 
+Loading the skill does not mean dispatching agents. The manager first runs a right-sizing gate. If the task is small, localized, or cheaper to complete directly, it should skip multi-agent orchestration and finish as a single agent.
+
 Do **not** use it merely because a task is large. If the user has not authorized multi-agent execution, propose it briefly or proceed as a single agent.
 
 ---
@@ -76,6 +80,7 @@ Do **not** use it merely because a task is large. If the user has not authorized
 
 ```text
 Context Intake
+-> Right-Sizing Gate
 -> Capability Gate
 -> Spec / Acceptance Registry
 -> Artifact Directory
@@ -94,7 +99,15 @@ The manager owns scheduling, state, merge, and final acceptance. Sub-agents own 
 
 The harness protocol is the stable core that remains the same across runtimes.
 
-### 1. Capability Gate
+### 1. Right-Sizing Gate
+
+Explicit multi-agent wording authorizes the manager to evaluate dispatch; it does not force dispatch.
+
+Dispatch is justified when the task has independent ownership surfaces, long or resumable scope, material verification risk, evaluator value, or isolation/rollback value.
+
+Dispatch is not justified for typo fixes, small copy edits, direct commands, one-file changes, simple config tweaks, or narrow local bugs. In those cases the manager should say briefly that multi-agent overhead is unnecessary, execute directly, and verify normally.
+
+### 2. Capability Gate
 
 Before delegating, the manager records what is available in the current runtime:
 
@@ -108,7 +121,7 @@ Before delegating, the manager records what is available in the current runtime:
 
 If a capability is missing, the manager must choose a fallback: execute sequentially, narrow scope, ask for a decision, or stop. It must not pretend that unavailable parallelism, browser checks, or evaluator isolation happened.
 
-### 2. State Machine
+### 3. State Machine
 
 The task advances through explicit states:
 
@@ -124,7 +137,7 @@ BLOCKED -> NEEDS_DECISION -> FAILED
 
 Each transition should leave a compact trace entry: current state, reason, owner, evidence path, and next state.
 
-### 3. Acceptance Registry
+### 4. Acceptance Registry
 
 Acceptance criteria are tracked as records, not prose. Each record should contain:
 
@@ -136,13 +149,13 @@ Acceptance criteria are tracked as records, not prose. Each record should contai
 
 The manager cannot claim completion while any required registry item is not `pass` or explicitly `scoped_out` by user decision.
 
-### 4. Budget Circuit Breaker
+### 5. Budget Circuit Breaker
 
 Each stage should have a small budget envelope: time, context, tool calls, retries, cost, and external side effects. When the stage breaches the envelope, the manager stops and records whether to continue, split, reduce scope, or ask the user.
 
 The circuit breaker is meant to preserve resumability and prevent hidden burn, not to optimize for arbitrary limits.
 
-### 5. Trace
+### 6. Trace
 
 Trace is the minimum durable evidence needed to resume and audit:
 
@@ -155,7 +168,7 @@ Trace is the minimum durable evidence needed to resume and audit:
 
 Trace can live in the progress ledger or a dedicated file when the run is complex. Chat alone is not durable state.
 
-### 6. Runtime Adapters
+### 7. Runtime Adapters
 
 Adapters explain how the same protocol maps onto each runtime's controls. They do not change the protocol.
 
@@ -309,6 +322,13 @@ Start with the adapter for the runtime you are actually using, then run the same
 
 ---
 
+## v5.0.1 Highlights
+
+- Added a right-sizing gate before capability checks and DAG creation.
+- Clarified that explicit multi-agent wording authorizes evaluation, not automatic dispatch.
+- Added guidance to skip worker creation, worktrees, and artifacts for small tasks.
+- Updated runtime adapters and eval cases to prevent coordination overhead on one-agent work.
+
 ## v5.0.0 Highlights
 
 - Upgraded the skill from protocol guidance into a manager-enforced harness protocol.
@@ -347,6 +367,6 @@ Existing v4 prompts and templates still map cleanly to v5, but long or risky tas
 
 ## Version
 
-**v5.0.0** · 2026-05-26
+**v5.0.1** · 2026-05-27
 
-Previous public version: **v4.0.0** · 2026-05-26
+Previous public version: **v5.0.0** · 2026-05-26

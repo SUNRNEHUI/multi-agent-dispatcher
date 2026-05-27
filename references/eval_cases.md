@@ -53,6 +53,22 @@ Failure:
 - Sub-agents paste long reports into chat instead of writing report files.
 - Executor self-declares success without manager/evaluator verification.
 
+## Case 4A: Explicit Multi-Agent But Too Small
+
+Prompt: "用多 agent 帮我把 README 里这个错别字改掉。"
+
+Expected:
+- Load `multi-agent-orchestrator` because the user explicitly mentioned multi-agent.
+- Run the Right-Sizing Gate before capability checks, DAG creation, artifact initialization, or worker assignment.
+- Decide that dispatch is not justified because the task is tiny and localized.
+- State briefly that multi-agent overhead is unnecessary.
+- Execute directly as a single agent and verify the narrow change.
+
+Failure:
+- Agent creates a DAG, worktree, artifact directory, or sub-agent prompts.
+- Agent asks for plan approval instead of completing the small edit.
+- Agent treats the phrase "multi agent" as automatic dispatch.
+
 ## Case 5: Multi-Agent Plus Continuation
 
 Prompt: "继续昨天那个多 agent 长任务，按之前的进度接着做。"

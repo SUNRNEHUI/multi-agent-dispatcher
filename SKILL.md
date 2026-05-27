@@ -4,16 +4,17 @@ description: >
   Use when the user asks for multi-agent work, delegation, sub-agents, parallel
   agents, 并行处理, 委托, 多智能体, 多 Agent, sub-agent, agent 分工, DAG 调度,
   分头处理, 分别派, 拆给不同 agent, worktree-based parallel execution, or a
-  long-running multi-agent engineering loop with resumable state and verification
-  evidence. This skill helps the manager run large delegated tasks through a
-  closed loop: spec, DAG, bounded sub-agent tasks, progress ledger, evidence-based
-  verification, stop/rollback, merge, and handoff. Do not use for ordinary
-  single-agent coding or analysis.
+  long-running engineering loop with resumable state and verification evidence.
+  Load this skill to decide whether delegation is warranted; explicit
+  multi-agent wording authorizes evaluation, not automatic dispatch. For small
+  or localized tasks, skip multi-agent orchestration and execute directly.
 ---
 
 # Multi-Agent Dispatcher
 
-Use this skill when the user asks for or clearly authorizes multiple agents, delegated work, parallel stages, or worktree isolation. Multi-agent work is treated as a long-task engineering loop by default.
+Use this skill when the user asks for or clearly authorizes multiple agents, delegated work, parallel stages, or worktree isolation. Multi-agent work is usually a long-task engineering loop, but explicit multi-agent wording does not force dispatch.
+
+First right-size the request. If the task is small, localized, or cheaper to complete directly, state briefly that multi-agent dispatch is unnecessary and proceed as a single agent. Do not create DAGs, artifacts, worker prompts, or sub-agent runs for coordination theater.
 
 Do not silently infer multi-agent execution merely because a task is broad. If multi-agent work seems useful but the user has not authorized it, propose it briefly or proceed as a single agent according to the normal task flow.
 
@@ -26,35 +27,63 @@ This is a harness protocol, not just a checklist. When full artifact mode is act
 Run multi-agent tasks through this sequence:
 
 ```text
-Context Intake -> Capability Gate -> Spec -> Artifact Directory -> DAG / Plan Gate -> Sub-Agent Execution -> State Update -> Verification Gate -> Stop/Rollback Check -> Merge -> Handoff
+Context Intake -> Right-Sizing Gate -> Capability Gate -> Spec -> Artifact Directory -> DAG / Plan Gate -> Sub-Agent Execution -> State Update -> Verification Gate -> Stop/Rollback Check -> Merge -> Handoff
 ```
 
-Use real delegation or sub-agent tools only when they are available. When the user explicitly asks for real sub-agents, check the active tools or tool discovery if available before falling back. If no such tool is available, do not pretend to run parallel agents; create the DAG and execute stages sequentially or explain the limitation.
+Use real delegation or sub-agent tools only after the Right-Sizing Gate passes and the tools are available. When the user explicitly asks for real sub-agents, check the active tools or tool discovery if available before falling back. If no such tool is available, do not pretend to run parallel agents; create the DAG and execute stages sequentially or explain the limitation.
 
 ## Protocol Gates
 
 For full artifact mode, the manager must pass these gates:
 
-1. **Capability Gate:** record the current runtime abilities and fallback plan.
-2. **Plan Gate:** define the DAG, ownership, budgets, verification method, and stop conditions.
-3. **State Gate:** write stage/task status to durable artifacts after every meaningful stage.
-4. **Verification Gate:** map evidence to acceptance criteria before PASS.
-5. **Supervision Gate:** stop when budget, risk, ownership, or verification rules require it.
+1. **Right-Sizing Gate:** decide whether actual multi-agent dispatch is justified.
+2. **Capability Gate:** record the current runtime abilities and fallback plan.
+3. **Plan Gate:** define the DAG, ownership, budgets, verification method, and stop conditions.
+4. **State Gate:** write stage/task status to durable artifacts after every meaningful stage.
+5. **Verification Gate:** map evidence to acceptance criteria before PASS.
+6. **Supervision Gate:** stop when budget, risk, ownership, or verification rules require it.
 
 If a gate cannot be satisfied, stop with `BLOCKED` or `需要决策` and leave a handoff. Do not replace missing evidence with a confident summary.
 
 ## When To Apply
 
-Apply this skill when at least one is true:
+Load this skill when at least one is true:
 
 - The user explicitly asks for multiple agents, sub-agents, delegation, parallel agents, DAG scheduling, or worktree isolation.
 - The user asks to split agent work across independently owned tracks such as frontend, backend, tests, docs, data migration, or evaluator.
 - The user asks for a multi-agent task that must be resumable, verified, or continued across sessions.
 - The user says agents may be used if useful, and the task is genuinely parallelizable with clear ownership boundaries.
 
-Do not use this for small edits, simple questions, direct command results, or ordinary single-agent coding where one agent can finish and verify locally.
+Actually dispatch multiple agents only when the Right-Sizing Gate passes. Do not dispatch for small edits, simple questions, direct command results, or ordinary single-agent coding where one agent can finish and verify locally, even if the user casually mentions multi-agent execution.
 
 High-impact operations such as production data, publishing, permissions, paid APIs, or destructive actions do not independently trigger this skill. They are escalation and stop conditions after a multi-agent workflow has already been authorized.
+
+## Right-Sizing Gate
+
+Run this gate before capability checks, DAG creation, artifact initialization, or worker assignment.
+
+Multi-agent dispatch is justified when at least two of these are true:
+
+- The task has multiple independent ownership surfaces that can proceed in parallel, such as frontend, backend, tests, docs, migration, or evaluator.
+- The task is long, risky, resumable, or likely to exceed a normal single-agent context loop.
+- Independent review or an evaluator materially reduces false completion risk.
+- Worktree or file ownership isolation would reduce merge, rollback, or regression risk.
+- The user explicitly asks for separate agents to compare approaches, investigate distinct hypotheses, or execute bounded tracks.
+
+Dispatch is not justified when any of these dominate:
+
+- The task is a typo fix, small copy edit, direct command, one-file change, simple config tweak, or narrow local bug.
+- The manager would spend more effort coordinating than implementing and verifying.
+- There are no clean ownership boundaries or all workers would need the same files at the same time.
+- The only reason to dispatch is that the user used the words "multi-agent" or "agents" without a task that benefits from delegation.
+
+If the gate fails, respond briefly with the decision and proceed directly:
+
+```text
+这个任务很小，不值得启动多 agent。我会按单 agent 直接完成并验证。
+```
+
+If the user explicitly says to force multi-agent despite the gate failing, explain the overhead once. Proceed only if the user confirms that the overhead is intentional.
 
 ## Operating Modes
 
@@ -249,4 +278,4 @@ End with:
 
 ---
 
-*Multi-Agent Dispatcher v5.0.0 | 2026-05-26*
+*Multi-Agent Dispatcher v5.0.1 | 2026-05-27*

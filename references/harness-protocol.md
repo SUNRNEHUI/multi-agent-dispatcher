@@ -6,31 +6,63 @@ This reference defines the v5 core protocol. It is intentionally separate from a
 
 The harness turns multi-agent orchestration from advice into a required control loop:
 
-1. decide whether multi-agent dispatch is justified
+1. choose Direct, Lite, or Full mode
 2. discover actual runtime capabilities
 3. create a bounded spec and acceptance registry
 4. advance through explicit states
-5. collect worker and evaluator evidence
+5. collect worker, testing, review, and evaluator evidence
 6. stop on budget or safety breaks
 7. claim completion only when required acceptance records pass
 
-## Right-Sizing Gate
+## Mode Selection Gate
 
-Explicit multi-agent wording authorizes the manager to evaluate dispatch. It does not require dispatch.
+Explicit multi-agent wording authorizes the manager to evaluate the mode. It does not require dispatch.
 
 The manager should skip multi-agent orchestration when the task is small, localized, lacks clean ownership boundaries, or would cost more to coordinate than to complete directly. In that case, the manager should say so briefly, execute as a single agent, and verify normally without creating run artifacts.
 
-The manager should proceed with multi-agent dispatch when delegation materially helps because the work is parallelizable, long, resumable, risky, evaluator-sensitive, or benefits from isolated ownership and rollback.
+The manager should proceed with Lite Orchestration or Full Harness when delegation materially helps because the work is parallelizable, long, resumable, risky, evaluator-sensitive, or benefits from isolated ownership and rollback.
+
+Other planning, TDD, worktree, review, verification, or parallel-agent methods are supporting methods after this gate. They do not replace mode selection.
+
+## Operating Modes
+
+Choose the thinnest mode that still protects the work.
+
+### Direct Mode
+
+Use Direct mode for small edits, narrow fixes, simple questions, direct commands, and ordinary single-agent work. The manager does the work directly, verifies normally, and does not create harness artifacts, worker reports, trace files, or registries.
+
+### Lite Orchestration
+
+Use Lite Orchestration for medium tasks where decomposition helps but the cost of a full harness would dominate the work. Lite mode may use a short plan, bounded worker or stage reports, and only the acceptance evidence needed for the task. It should not create the full artifact set by default.
+
+Lite mode is appropriate when:
+
+- the task has two or more bounded surfaces, but is not long-running or high-risk
+- the user asked for coordination, but resumability is not important
+- a worker-style split helps review without needing durable machine-readable state
+- verification can be captured in a small command summary, diff review, screenshot, or report
+
+Lite mode may borrow test-first evidence, compact review, or parallel-agent discipline when useful, but it should not expand into full ceremony without a Full Harness trigger.
+
+### Full Harness
+
+Use Full Harness only when the work is long, risky, resumable, multi-stage, evaluator-sensitive, likely to need rollback, or explicitly requires durable coordination across agents or sessions.
+
+Full Harness is the only mode that requires the complete record set below. If a task does not need resumable state, acceptance registry blocking, budget breakers, and trace continuity, prefer Direct or Lite mode.
 
 ## Required Records
 
-A run should preserve these records in durable files when the task is complex or resumable.
+Required records are mandatory only for Full Harness runs. Direct mode creates none. Lite Orchestration may keep only a short plan, worker report, and necessary acceptance evidence.
+
+A Full Harness run should preserve these records in durable files when the task is complex or resumable.
 
 ### Capability Record
 
 - runtime name
 - available tools
 - unavailable tools
+- available supporting methods such as TDD, worktree, review, verification, or parallel-agent skills
 - filesystem and sandbox limits
 - browser or UI verification availability
 - sub-agent mechanism or fallback
@@ -55,6 +87,8 @@ A run should preserve these records in durable files when the task is complex or
 - required evidence
 - status: `pending`, `pass`, `fail`, `blocked`, or `scoped_out`
 - evidence path or command summary
+- test-first or substitute verification evidence for code behavior changes when applicable
+- spec compliance or code quality review evidence when required by risk
 - evaluator notes when relevant
 
 ### Budget Record
@@ -105,6 +139,8 @@ The manager can say the task is complete only when:
 
 - required capability fallbacks are recorded
 - every required acceptance record is `pass` or explicitly `scoped_out` by user decision
+- required testing or substitute verification evidence has been reviewed
+- required spec compliance and code quality reviews are `pass` or explicitly scoped out by user decision
 - evaluator `FAIL` has been resolved or explicitly scoped out by user decision
 - budget breakers are closed with a continuation or stop decision
 - trace points to the evidence used for completion

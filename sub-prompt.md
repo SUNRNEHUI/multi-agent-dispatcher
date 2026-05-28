@@ -25,10 +25,11 @@ If these are missing or contradictory, return `需要决策` instead of guessing
 1. Work only inside the authorized scope.
 2. Preserve unrelated user or agent changes.
 3. Prefer project conventions over generic patterns.
-4. Run the smallest relevant verification for your slice.
-5. Mark any stub, TODO, mock, skipped test, or unverified path explicitly.
-6. Write a report to the requested path.
-7. Do not mark your slice complete without concrete evidence. If evidence is unavailable, return `需要决策` or `失败`.
+4. For code behavior changes, identify the verification path before implementation. Use test-first evidence when a meaningful test exists or can be added at reasonable cost; otherwise record the substitute check and reason.
+5. Run the smallest relevant verification for your slice.
+6. Mark any stub, TODO, mock, skipped test, or unverified path explicitly.
+7. Write a report to the requested path.
+8. Do not mark your slice complete without concrete evidence. If evidence is unavailable, return `需要决策` or `失败`.
 
 ## Required Report Shape
 
@@ -68,4 +69,4 @@ Return `需要决策` when:
 
 ---
 
-*Sub-Agent Prompt v5.0.1 | 2026-05-27*
+*Sub-Agent Prompt v5.2.0 | 2026-05-28*

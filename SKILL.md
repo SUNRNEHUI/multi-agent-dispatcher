@@ -1,47 +1,93 @@
 ---
 name: multi-agent-dispatcher
 description: >
-  Use when the user asks for multi-agent work, delegation, sub-agents, parallel
-  agents, 并行处理, 委托, 多智能体, 多 Agent, sub-agent, agent 分工, DAG 调度,
-  分头处理, 分别派, 拆给不同 agent, worktree-based parallel execution, or a
-  long-running engineering loop with resumable state and verification evidence.
-  Load this skill to decide whether delegation is warranted; explicit
-  multi-agent wording authorizes evaluation, not automatic dispatch. For small
-  or localized tasks, skip multi-agent orchestration and execute directly.
+  Use when the user explicitly asks for multi-agent work, delegated agents,
+  sub-agents, parallel agents, DAG scheduling, worktree-based parallel execution,
+  分头处理, 分别派, 拆给不同 agent, 多智能体, 多 Agent, or resumable/evidence-verified
+  long-running agent coordination.
 ---
 
 # Multi-Agent Dispatcher
 
 Use this skill when the user asks for or clearly authorizes multiple agents, delegated work, parallel stages, or worktree isolation. Multi-agent work is usually a long-task engineering loop, but explicit multi-agent wording does not force dispatch.
 
-First right-size the request. If the task is small, localized, or cheaper to complete directly, state briefly that multi-agent dispatch is unnecessary and proceed as a single agent. Do not create DAGs, artifacts, worker prompts, or sub-agent runs for coordination theater.
+This skill is the routing authority for multi-agent requests. Other planning, TDD, worktree, review, verification, or parallel-agent methods are supporting methods after this skill selects Direct Mode, Lite Orchestration, or Full Harness.
+
+First choose the lightest mode that can finish and verify the task:
+
+```text
+Small, local, obvious?        -> Direct Mode
+Moderate, separable slices?   -> Lite Orchestration
+Long, risky, resumable?       -> Full Harness
+```
+
+Do not create DAGs, artifacts, worker prompts, or sub-agent runs for coordination theater.
 
 Do not silently infer multi-agent execution merely because a task is broad. If multi-agent work seems useful but the user has not authorized it, propose it briefly or proceed as a single agent according to the normal task flow.
 
 The manager owns scheduling, state, merge, and final acceptance. Sub-agents own bounded execution units.
 
-This is a harness protocol, not just a checklist. When full artifact mode is active, the manager must produce durable state and verification evidence before claiming completion.
+Full artifact mode only when justified. When Full Harness is active, the manager must produce durable state and verification evidence before claiming completion. Otherwise keep state lightweight and proportional to the work.
 
-## Core Loop
+## Mode Selection
 
-Run multi-agent tasks through this sequence:
+Run this decision before capability checks, DAG creation, artifact initialization, or worker assignment.
+
+### Direct Mode
+
+Use Direct Mode when the task is a small edit, one-file change, direct command, simple config tweak, narrow bug, small question, or any task one agent can finish and verify locally.
+
+In Direct Mode:
+
+- Do not dispatch workers.
+- Do not create DAGs, artifact directories, capability snapshots, ledgers, or reports.
+- Execute directly, verify normally, and summarize the result.
+
+If the user asked for multi-agent on a small task, respond briefly and proceed directly:
 
 ```text
-Context Intake -> Right-Sizing Gate -> Capability Gate -> Spec -> Artifact Directory -> DAG / Plan Gate -> Sub-Agent Execution -> State Update -> Verification Gate -> Stop/Rollback Check -> Merge -> Handoff
+这个任务很小，不值得启动多 agent。我会按单 agent 直接完成并验证。
 ```
 
-Use real delegation or sub-agent tools only after the Right-Sizing Gate passes and the tools are available. When the user explicitly asks for real sub-agents, check the active tools or tool discovery if available before falling back. If no such tool is available, do not pretend to run parallel agents; create the DAG and execute stages sequentially or explain the limitation.
+If the user explicitly says to force multi-agent despite the overhead, explain the overhead once. Proceed only if the user confirms that the overhead is intentional.
+
+### Lite Orchestration
+
+Use Lite Orchestration when the task is medium-sized, has separable ownership slices, and benefits from bounded workers or short reports, but does not need resumable full-state machinery.
+
+In Lite Orchestration:
+
+- Use a short plan with owners, scopes, expected outputs, and verification.
+- Keep worker count bounded to the clear parallel surfaces.
+- Apply parallel-agent discipline: dispatch only independent problem domains with no shared edit surface or unresolved sequential dependency.
+- Give each worker fresh, task-local context rather than relying on hidden conversation history.
+- Prefer short inline status or compact reports over a full artifact set.
+- Do not create `capability_snapshot.md`, `run_state.json`, `acceptance_registry.json`, `trace.jsonl`, or a full artifact directory unless risk or resumability justifies it.
+- Manager still owns merge, verification, and final acceptance.
+
+### Full Harness
+
+Use Full Harness only when the task is long, high-risk, resumable, multi-stage, has multiple real workers, needs worktree isolation, requires an evaluator, or must preserve durable evidence across sessions.
+
+Full Harness uses the complete protocol:
+
+```text
+Context Intake -> Mode Selection -> Capability Gate -> Spec -> Artifact Directory -> DAG / Plan Gate -> Sub-Agent Execution -> State Update -> Verification Gate -> Stop/Rollback Check -> Merge -> Handoff
+```
+
+Use real delegation or sub-agent tools only after Mode Selection chooses Lite Orchestration or Full Harness and the tools are available. When the user explicitly asks for real sub-agents, check the active tools or tool discovery if available before falling back. If no such tool is available, do not pretend to run parallel agents; create the DAG and execute stages sequentially or explain the limitation.
 
 ## Protocol Gates
 
-For full artifact mode, the manager must pass these gates:
+For Full Harness, the manager must pass these gates:
 
-1. **Right-Sizing Gate:** decide whether actual multi-agent dispatch is justified.
+1. **Mode Selection Gate:** decide between Direct Mode, Lite Orchestration, and Full Harness.
 2. **Capability Gate:** record the current runtime abilities and fallback plan.
 3. **Plan Gate:** define the DAG, ownership, budgets, verification method, and stop conditions.
 4. **State Gate:** write stage/task status to durable artifacts after every meaningful stage.
-5. **Verification Gate:** map evidence to acceptance criteria before PASS.
-6. **Supervision Gate:** stop when budget, risk, ownership, or verification rules require it.
+5. **Testing / Review Gate:** for code behavior changes, require test-first evidence when a meaningful test path exists; for high-risk implementation, separate spec compliance review from code quality review.
+6. **Verification Gate:** map evidence to acceptance criteria before PASS.
+7. **Supervision Gate:** stop when budget, risk, ownership, or verification rules require it.
 
 If a gate cannot be satisfied, stop with `BLOCKED` or `需要决策` and leave a handoff. Do not replace missing evidence with a confident summary.
 
@@ -54,15 +100,13 @@ Load this skill when at least one is true:
 - The user asks for a multi-agent task that must be resumable, verified, or continued across sessions.
 - The user says agents may be used if useful, and the task is genuinely parallelizable with clear ownership boundaries.
 
-Actually dispatch multiple agents only when the Right-Sizing Gate passes. Do not dispatch for small edits, simple questions, direct command results, or ordinary single-agent coding where one agent can finish and verify locally, even if the user casually mentions multi-agent execution.
+Actually dispatch multiple agents only when Mode Selection chooses Lite Orchestration or Full Harness. Do not dispatch for small edits, simple questions, direct command results, or ordinary single-agent coding where one agent can finish and verify locally, even if the user casually mentions multi-agent execution.
 
 High-impact operations such as production data, publishing, permissions, paid APIs, or destructive actions do not independently trigger this skill. They are escalation and stop conditions after a multi-agent workflow has already been authorized.
 
-## Right-Sizing Gate
+## Dispatch Criteria
 
-Run this gate before capability checks, DAG creation, artifact initialization, or worker assignment.
-
-Multi-agent dispatch is justified when at least two of these are true:
+Choose Lite Orchestration or Full Harness when at least two of these are true:
 
 - The task has multiple independent ownership surfaces that can proceed in parallel, such as frontend, backend, tests, docs, migration, or evaluator.
 - The task is long, risky, resumable, or likely to exceed a normal single-agent context loop.
@@ -75,25 +119,21 @@ Dispatch is not justified when any of these dominate:
 - The task is a typo fix, small copy edit, direct command, one-file change, simple config tweak, or narrow local bug.
 - The manager would spend more effort coordinating than implementing and verifying.
 - There are no clean ownership boundaries or all workers would need the same files at the same time.
+- Candidate tasks share unresolved state or must be done sequentially.
 - The only reason to dispatch is that the user used the words "multi-agent" or "agents" without a task that benefits from delegation.
-
-If the gate fails, respond briefly with the decision and proceed directly:
-
-```text
-这个任务很小，不值得启动多 agent。我会按单 agent 直接完成并验证。
-```
-
-If the user explicitly says to force multi-agent despite the gate failing, explain the overhead once. Proceed only if the user confirms that the overhead is intentional.
 
 ## Operating Modes
 
-- **Lightweight mode:** For moderate delegated work, keep the spec and ledger brief. Continue executing unless a hard stop condition appears.
+- **Direct Mode:** For small or localized work, execute directly without dispatch or artifacts.
+- **Lite Orchestration:** For moderate delegated work, keep the plan and reporting brief. Continue executing unless a hard stop condition appears.
 - **Alignment mode:** For ambiguous plans, architecture, agent ownership, or dependency trees, ask one question at a time until shared understanding is good enough to build the DAG. Each question must include the manager's recommended answer.
-- **Full artifact mode:** For long, risky, resumable, or truly parallel work, write durable artifacts and update them at stage boundaries.
+- **Full Harness:** For long, risky, resumable, or truly parallel work, write durable artifacts and update them at stage boundaries.
 
 Do not block ordinary implementation just to ask for plan approval. Pause only when scope, risk, ambiguity, destructive operations, or repeated verification failures make a wrong decision expensive.
 
 ## Artifacts
+
+Full artifact mode only when justified. Direct Mode creates no orchestration artifacts. Lite Orchestration defaults to no full artifact set; use only a short plan, compact worker reports, or existing project planning files unless risk increases.
 
 Prefer existing project planning, issue, or workspace conventions. If none exist, place artifacts under `<active-project-root>/workspace/<task-slug>/`.
 
@@ -110,7 +150,7 @@ Recommended files:
 
 Use templates in `templates/` when no project-specific format exists.
 
-For full artifact mode, prefer the bundled initializer instead of hand-creating files:
+For Full Harness, prefer the bundled initializer instead of hand-creating files:
 
 ```bash
 python3 <skill-dir>/scripts/init_run.py --project-root <active-project-root> --title "<task title>" --agents frontend,backend,tests
@@ -192,9 +232,29 @@ git worktree add -b feature/<topic>-tests ../wt-<topic>-tests
 
 Use the project's own branch policy, test commands, and workflow docs over generic templates.
 
+## Testing And Review Gates
+
+Use project tests and local instructions first. Do not invent meaningless tests to satisfy process.
+
+For code behavior changes in Lite Orchestration or Full Harness:
+
+- Identify the relevant test, fixture, script, smoke check, or manual verification path before implementation.
+- If a meaningful automated test exists or can be added at reasonable cost, require test-first evidence: failing or gap-revealing test before production change, then passing verification after.
+- If the project has no suitable test infrastructure or the change is docs/config-only, record the reason and use the smallest useful substitute verification.
+
+For Full Harness implementation tasks:
+
+- Prefer two separate reviews when risk justifies it:
+  - Spec compliance review: checks required behavior, non-goals, missing work, and extra behavior.
+  - Code quality review: checks maintainability, scope, local conventions, error handling, and regression risk.
+- Treat review PASS/FAIL/BLOCKED as evidence for the manager, not as final acceptance.
+- Any FAIL or BLOCKED review must create a repair task, stop reason, or explicit user decision.
+
 ## Sub-Agent Contract
 
 Keep sub-agent tasks concrete, bounded, and independently verifiable. Give each sub-agent disjoint file ownership or responsibility ownership.
+
+Worker prompts must be self-contained. Include the goal, allowed scope, relevant paths, constraints, expected output, verification requirement, stop conditions, and return format. Do not rely on "as discussed above" or the worker inheriting the manager's hidden context.
 
 Ask each sub-agent to return only four lines:
 
@@ -228,6 +288,8 @@ Prefer external evidence over self-assessment:
 - Independent evaluation: evaluator agent, focused review, CI, or a strict rubric.
 
 Reject outputs that package stubs, TODOs, mocks, or untested critical paths as completion. For Web/UI work, browser-level verification is required when a browser is available and the UI path matters.
+
+Before claiming completion, the manager must inspect the relevant diff or output, run or review the freshest available verification evidence, and state any unverified paths. Sub-agent self-assessment is never enough.
 
 For full artifact mode:
 
@@ -269,6 +331,7 @@ End with:
 
 - Read `references/closed-loop-pattern.md` when designing or revising the orchestration loop.
 - Read `references/harness-protocol.md` when deciding which control layers should be hard protocol versus lightweight guidance.
+- Read `references/superpowers-integration.md` when deciding how to borrow TDD, parallel-agent, review, worktree, or verification methods without letting another workflow replace this skill's mode router.
 - Read `references/roles.md` when deciding whether to spawn explorers, workers, evaluators, or mergers.
 - Read `references/stop-conditions.md` when a task has high impact, ambiguous scope, repeated failures, or external side effects.
 - Read `references/eval_cases.md` when testing whether this skill triggers and behaves correctly.
@@ -278,4 +341,4 @@ End with:
 
 ---
 
-*Multi-Agent Dispatcher v5.0.1 | 2026-05-27*
+*Multi-Agent Dispatcher v5.2.1 | 2026-05-28*

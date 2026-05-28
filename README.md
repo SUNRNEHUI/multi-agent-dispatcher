@@ -1,8 +1,14 @@
 # Multi-Agent Dispatcher
 
-**A harness protocol for large, resumable, evidence-verified multi-agent work.**
+[简体中文](README.zh-CN.md) | English
 
-> v5 evolves the project from protocol guidance into a manager-enforced dispatch harness: the main agent must gate capabilities, advance a state machine, require acceptance evidence, enforce budget stops, keep traceable state, and adapt the same core protocol to different agent runtimes.
+**A mode router for direct work, lightweight coordination, and full multi-agent harness runs.**
+
+> v5.1 makes the skill smaller in daily use: the manager first chooses Direct, Lite, or Full mode. Full Harness remains available for long, risky, resumable work, but small and medium tasks should avoid unnecessary artifacts, worker setup, and ceremony.
+
+> v5.2 adds Superpowers-aware methods without replacing the router: TDD, parallel-agent discipline, fresh worker context, two-stage review, worktree isolation, and verification-before-completion can strengthen Lite and Full mode when the task justifies them.
+
+> v5.2.1 makes public sharing cleaner: it adds explicit Superpowers acknowledgement, tightens skill trigger metadata, and adds a packaging helper for runtime-only installs.
 
 ---
 
@@ -16,7 +22,13 @@ Multi-agent work usually fails in predictable ways:
 - Executors mark unfinished stubs or unverified UI as complete.
 - High-impact operations continue without a clear stop or rollback point.
 
-This skill treats the filesystem as durable task state and makes the manager responsible for convergence. In v5, the important change is not more process; it is that the process becomes a protocol the manager must run before it can claim completion.
+This skill now starts with mode selection, not automatic harness setup:
+
+- **Direct:** one agent handles the task directly, verifies normally, and skips dispatcher artifacts.
+- **Lite:** the manager coordinates a small amount of decomposition or review without creating the full harness directory.
+- **Full:** the manager runs the durable harness for multi-agent, resumable, evidence-verified work.
+
+Full mode treats the filesystem as durable task state and makes the manager responsible for convergence. Direct and Lite modes preserve the same bias toward real verification while avoiding process that does not help the current task.
 
 It also avoids over-delegation: if the user asks for multi-agent execution on a tiny task, the manager first decides whether dispatch is actually useful. Small edits should be completed directly by one agent.
 
@@ -35,6 +47,8 @@ Each sub-agent gets bounded ownership: files, responsibility, expected report, e
 ### Evidence-Based Completion
 
 Sub-agent completion is not final completion. The manager or evaluator verifies with tests, build output, browser checks, readback, logs, screenshots, or CI evidence.
+
+For code behavior changes, the manager identifies the verification path before implementation. When meaningful tests exist or can be added at reasonable cost, workers should produce test-first evidence; docs-only and config-only work use proportionate substitute checks instead of meaningless tests.
 
 ### Harness-Level Control
 
@@ -70,7 +84,11 @@ Load this skill when the user explicitly asks for:
 - 分头处理 / 分别派 / 拆给不同 agent
 - multi-agent work that must be resumable or evidence-verified
 
-Loading the skill does not mean dispatching agents. The manager first runs a right-sizing gate. If the task is small, localized, or cheaper to complete directly, it should skip multi-agent orchestration and finish as a single agent.
+Loading the skill does not mean dispatching agents or creating harness files. The manager first chooses the smallest mode that can handle the work:
+
+- Use **Direct** for small edits, narrow local bugs, command output, copy changes, and single-agent fixes.
+- Use **Lite** for medium work that benefits from decomposition, targeted review, or sequential subtask tracking, but does not need durable run artifacts.
+- Use **Full** for independent ownership surfaces, real parallel workers, long or resumable scope, material verification risk, evaluator value, or isolation/rollback value.
 
 Do **not** use it merely because a task is large. If the user has not authorized multi-agent execution, propose it briefly or proceed as a single agent.
 
@@ -80,32 +98,27 @@ Do **not** use it merely because a task is large. If the user has not authorized
 
 ```text
 Context Intake
--> Right-Sizing Gate
--> Capability Gate
--> Spec / Acceptance Registry
--> Artifact Directory
--> State Machine Stage Gate
--> Bounded Execution
--> Trace / Progress Ledger
--> Verification / Evaluator
--> Budget / Stop Check
--> Merge
--> Handoff
+-> Mode Selection: Direct / Lite / Full
+-> Execute the selected mode
+   Direct: do the work, verify, report
+   Lite: coordinate bounded slices, verify, report
+   Full: run capability gate, acceptance registry, state machine, trace, and evaluator as needed
+-> Merge / Handoff
 ```
 
-The manager owns scheduling, state, merge, and final acceptance. Sub-agents own bounded execution units.
+The manager owns mode selection, scheduling when needed, merge, and final acceptance. Sub-agents are used only when they add value through parallelism, isolation, specialist review, or resumability.
 
-## v5 Harness Protocol
+## Full Harness Protocol
 
-The harness protocol is the stable core that remains the same across runtimes.
+The full harness protocol is the stable core used only when Full mode is justified. It remains the same across runtimes.
 
-### 1. Right-Sizing Gate
+### 1. Mode Selection Gate
 
-Explicit multi-agent wording authorizes the manager to evaluate dispatch; it does not force dispatch.
+Explicit multi-agent wording authorizes the manager to evaluate the mode; it does not force dispatch.
 
-Dispatch is justified when the task has independent ownership surfaces, long or resumable scope, material verification risk, evaluator value, or isolation/rollback value.
+Full mode is justified when the task has independent ownership surfaces, long or resumable scope, material verification risk, evaluator value, or isolation/rollback value.
 
-Dispatch is not justified for typo fixes, small copy edits, direct commands, one-file changes, simple config tweaks, or narrow local bugs. In those cases the manager should say briefly that multi-agent overhead is unnecessary, execute directly, and verify normally.
+Full mode is not justified for typo fixes, small copy edits, direct commands, one-file changes, simple config tweaks, or narrow local bugs. In those cases the manager should use Direct mode, execute directly, and verify normally.
 
 ### 2. Capability Gate
 
@@ -180,8 +193,17 @@ Adapters explain how the same protocol maps onto each runtime's controls. They d
 
 ## Install
 
+Create a clean runtime copy first:
+
 ```bash
-cp -R multi-agent-dispatcher ~/.codex/skills/
+python3 scripts/package_skill.py --output /tmp/multi-agent-dispatcher-runtime --force
+```
+
+Then install that clean copy:
+
+```bash
+mkdir -p ~/.codex/skills/multi-agent-dispatcher
+rsync -a --delete /tmp/multi-agent-dispatcher-runtime/ ~/.codex/skills/multi-agent-dispatcher/
 ```
 
 Then ask Codex for explicitly delegated work, for example:
@@ -210,9 +232,11 @@ multi-agent-dispatcher/
 │   ├── eval_cases.md
 │   ├── harness-protocol.md
 │   ├── roles.md
+│   ├── superpowers-integration.md
 │   └── stop-conditions.md
 ├── scripts/
 │   ├── init_run.py
+│   ├── package_skill.py
 │   └── validate_report.py
 └── templates/
     ├── acceptance_registry.json
@@ -230,7 +254,7 @@ multi-agent-dispatcher/
 
 ## Artifact Directory
 
-For full artifact mode, initialize a run:
+For Full mode artifact runs, initialize a run:
 
 ```bash
 python3 scripts/init_run.py \
@@ -308,7 +332,7 @@ See [`references/roles.md`](references/roles.md).
 
 ## Runtime Adapters
 
-The v5 protocol is runtime-neutral. Adapters document the practical control points:
+The Full Harness protocol is runtime-neutral. Adapters document the practical control points:
 
 - where persistent instructions live
 - how tools and sandbox limits are discovered
@@ -318,9 +342,72 @@ The v5 protocol is runtime-neutral. Adapters document the practical control poin
 - how hooks or local instruction files preserve the protocol
 - where trace and acceptance records should be written
 
-Start with the adapter for the runtime you are actually using, then run the same capability gate and acceptance registry either way.
+Start with the adapter for the runtime you are actually using only after Full mode is selected. Direct and Lite mode should stay lightweight and use the runtime's ordinary verification path.
 
 ---
+
+## Superpowers Integration
+
+This project can borrow Superpowers-style methods, but does not require Superpowers to be installed.
+
+Acknowledgement: this project is independent and intentionally borrows several engineering patterns inspired by [obra/superpowers](https://github.com/obra/superpowers), including test-first evidence, fresh-context subagents, review gates, worktree isolation, and verification-before-completion. It does not copy Superpowers skill bodies or require the Superpowers plugin to run.
+
+The relationship is:
+
+```text
+multi-agent-dispatcher = routing authority
+Superpowers-style methods = optional supporting methods
+```
+
+Mode Selection always runs first. A small task stays Direct even if TDD, worktree, review, or parallel-agent skills are available. Lite and Full modes can borrow the useful methods when they reduce risk:
+
+- independent problem-domain splitting
+- fresh task-local worker prompts
+- test-first evidence for code behavior changes
+- separate spec compliance and code quality review
+- worktree isolation for conflict-prone parallel edits
+- verification before completion
+
+See [`references/superpowers-integration.md`](references/superpowers-integration.md).
+
+## Sharing The Skill
+
+Share the repository or a clean package containing the runtime skill files:
+
+- `SKILL.md`
+- `master-prompt.md`
+- `sub-prompt.md`
+- `agents/openai.yaml`
+- `adapters/`
+- `references/`
+- `templates/`
+- `scripts/init_run.py`
+- `scripts/validate_report.py`
+
+Keep human-facing docs such as this `README.md` and packaging helpers such as `scripts/package_skill.py` at the repo/package level. Do not include local memories, generated task workspaces, session logs, caches, bytecode, personal config, credentials, or `.git` internals in an installed runtime copy.
+
+---
+
+## v5.2.1 Highlights
+
+- Added explicit acknowledgement that the design borrows engineering patterns inspired by `obra/superpowers`.
+- Tightened `SKILL.md` frontmatter so it describes trigger conditions instead of summarizing workflow.
+- Added `scripts/package_skill.py` to create a clean runtime-only copy for sharing or installation.
+
+## v5.2.0 Highlights
+
+- Added Superpowers-aware routing while keeping `multi-agent-dispatcher` as the single entrypoint.
+- Added testing and review gates for Lite/Full code behavior changes.
+- Added fresh-context worker guidance and stricter independent-domain dispatch criteria.
+- Added sharing/package guidance to keep runtime installs lean and portable.
+- Added eval cases for TDD evidence, two-stage review, Superpowers interaction, and clean sharing.
+
+## v5.1.0 Highlights
+
+- Added three-mode routing: **Direct**, **Lite**, and **Full**.
+- Made Full Harness explicitly on-demand instead of the default path for every request.
+- Reduced overproduction of artifacts for small and medium tasks.
+- Aligned the public guidance with Codex and Claude community practice: less ceremony, real verification, and sub-agents only when they add value.
 
 ## v5.0.1 Highlights
 
@@ -342,15 +429,17 @@ Start with the adapter for the runtime you are actually using, then run the same
 
 ## Upgrade Notes
 
-v5 keeps the public skill purpose the same, but tightens the manager's responsibilities:
+v5.2 keeps the public skill purpose the same, but makes the manager choose the smallest useful mode first and borrow mature supporting methods only when they fit the selected mode:
 
-- Treat multi-agent work as a protocol run, not a chat-only checklist.
+- Treat multi-agent work as a protocol run only when Full mode is justified.
+- Prefer Direct or Lite mode when full artifacts would add overhead without improving verification.
+- Use Superpowers-style TDD, review, worktree, verification, and parallel-agent methods as supporting controls, not as a competing top-level router.
 - Record actual runtime capabilities before dispatching workers.
 - Keep acceptance criteria in `acceptance_registry.json` and require evidence before completion.
 - Keep run progress in `run_state.json`, `progress.md`, and `trace.jsonl` so another manager can resume.
 - Use runtime adapters only to map the same protocol onto Codex, Claude Code, or similar harnesses.
 
-Existing v4 prompts and templates still map cleanly to v5, but long or risky tasks should use the new full artifact set.
+Existing v4 and v5 prompts and templates still map cleanly to v5.2, but long or risky tasks should use Full mode and the full artifact set.
 
 ## v4.0.0 Highlights
 
@@ -367,6 +456,6 @@ Existing v4 prompts and templates still map cleanly to v5, but long or risky tas
 
 ## Version
 
-**v5.0.1** · 2026-05-27
+**v5.2.1** · 2026-05-28
 
-Previous public version: **v5.0.0** · 2026-05-26
+Previous public release: **v5.0.1** · 2026-05-27

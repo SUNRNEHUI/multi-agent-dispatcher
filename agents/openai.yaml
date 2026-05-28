@@ -1,4 +1,4 @@
 interface:
   display_name: "Multi-Agent Dispatcher"
-  short_description: "智能判断是否需要多 Agent，并在长任务中编排、续跑与验收"
-  default_prompt: "Use $multi-agent-dispatcher to decide whether this task warrants multi-agent dispatch; if it does, split it into bounded agents, track progress, verify evidence, and converge the result."
+  short_description: "先判断 Direct/Lite/Full，只有需要时才多 Agent 调度"
+  default_prompt: "Use $multi-agent-dispatcher to first choose Direct, Lite, or Full mode. Work directly for small tasks, coordinate lightly for medium tasks, and only dispatch multiple agents with the full harness when parallelism, isolation, resumability, or evidence risk makes it worthwhile."

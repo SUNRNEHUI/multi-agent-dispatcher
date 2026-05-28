@@ -13,9 +13,11 @@ Use the most specific instruction source available:
 
 Project rules override broader rules when they conflict. The manager should read the relevant files before editing and record any protocol-relevant constraints in the trace.
 
-## Right-Sizing Gate
+## Mode Selection Gate
 
 In Codex, skill loading and actual dispatch are separate decisions. If the user mentions multi-agent work for a tiny edit, use the skill to decide that dispatch is unnecessary, then complete the task directly. Do not spawn workers, create worktrees, or initialize artifact directories unless delegation is justified.
+
+Do not default to subagents, worktrees, or full artifact initialization merely because Codex makes local file edits, shell checks, and parallel worker prompts easy to operate. Medium tasks should normally use Lite Orchestration: a short plan, bounded worker or stage reports when useful, and targeted acceptance evidence. Escalate to Full Harness only for resumable, high-risk, multi-stage, evaluator-sensitive, or rollback-heavy work.
 
 ## Capability Gate
 
@@ -27,9 +29,12 @@ Record the actual session capabilities before dispatch:
 - browser or app automation tools
 - image, document, spreadsheet, or other specialized tools if relevant
 - whether real sub-agent delegation exists in the active environment
+- whether supporting skills or methods are available for TDD, worktrees, systematic debugging, code review, verification, or parallel-agent discipline
 - whether worktrees are safe given current git status
 
 If real sub-agents are unavailable, run sequential worker stages and say so in the trace. Do not label sequential work as parallel execution.
+
+Supporting skills do not replace the mode router. For example, if a Superpowers-style TDD or parallel-agent skill is installed, use it as a method only after this skill selects Lite Orchestration or Full Harness.
 
 ## Filesystem And Sandbox
 
@@ -55,12 +60,28 @@ When Codex has a real delegation mechanism, each worker should receive:
 
 - bounded goal
 - allowed paths or responsibility surface
+- task-local context that does not require hidden chat history
 - required report path
 - required evidence
 - stop conditions
 - four-line return contract
 
 When it does not, the manager can still run the same protocol with sequential stages. The state machine should show the fallback so later readers know no parallel isolation occurred.
+
+Do not delegate two workers to edit the same file or shared state in parallel unless the plan names a merge owner and conflict rule.
+
+## Testing, Review, And Completion
+
+Follow project `AGENTS.md` and local testing instructions first.
+
+For code behavior changes, Codex should identify a verification path before implementation. If meaningful automated tests exist or can be added at reasonable cost, prefer test-first evidence. For docs-only, config-only, or no-test-infrastructure work, record the reason and use a smaller substitute check.
+
+For Full Harness implementation risk, use separate review concerns when possible:
+
+- spec compliance: does the implementation match the request and acceptance criteria?
+- code quality: is the change maintainable, scoped, idiomatic, and low-risk?
+
+Before final completion, read the current diff or output, inspect the latest evidence, and state any unverified path. A worker report or skill invocation is not acceptance evidence by itself.
 
 ## Hooks And Skills
 
